@@ -3,8 +3,8 @@
 # Maintainer: Nile Aagard <inventerna@gmail.com>
 pkgname=ruby
 _pkgver="4.0"
-pkgver="$_pkgver.6"
-pkgrel=2
+pkgver="$_pkgver.7"
+pkgrel=1
 arch=('x86_64')
 pkgdesc="Full Ruby $pkgver installation"
 url="https://www.ruby-lang.org/en/"
@@ -15,14 +15,14 @@ optdepends=('libffi' 'gmp')
 provides=('gem' 'rake' 'irb' 'rdbg' 'bundle' 'bundler' 'racc' 'rdoc' 'rbs' 'minitest' 'erb'
 	# makepkg expands this to the soname, e.g. libruby.so=4.0-64
 	'libruby.so'
-	'rubygems=4.0.16' 'ruby-rubygems=4.0.16'
-	'ruby-bundler=4.0.16' 'ruby-erb=6.0.1.1' 'ruby-irb=1.16.0'
+	'rubygems=4.0.20' 'ruby-rubygems=4.0.20'
+	'ruby-bundler=4.0.20' 'ruby-erb=6.0.7' 'ruby-irb=1.16.0'
 	'ruby-minitest=6.0.0' 'ruby-racc=1.8.1' 'ruby-rake=13.3.1'
 	'ruby-rbs=3.10.0' 'ruby-rdoc=7.0.4')
 conflicts=('rubygems' 'ruby-rdoc' 'ruby-rbs' 'ruby-rake' 'ruby-racc' 'ruby-minitest' 'ruby-irb' 'ruby-erb' 'ruby-bundler')
 backup=('etc/gemrc')
 source=("https://cache.ruby-lang.org/pub/$pkgname/$_pkgver/$pkgname-$pkgver.tar.gz")
-sha256sums=('837d299e8f7ddf2be31a229a7a7e019d354979825117989acb3b32b1a9be262a')
+sha256sums=('911ace20f90d068ca0e4dda6d0e4f0f81e52e52f2dd4f4004c721e253412e82d')
 
 build() {
 	cd "$pkgname-$pkgver"
@@ -48,5 +48,19 @@ package() {
 
 	# Keep gem out of pacman-owned dirs, even under sudo
 	install -Dm644 /dev/stdin "$pkgdir/etc/gemrc" <<< 'gem: --user-install'
+
+	# RubyGems loads the plugin stubs in every gem dir, so a newer copy of a
+	# packaged gem in the user dir would load on top of ours; defer to it.
+	local stub gem ver req
+	for stub in "$pkgdir"/usr/lib/ruby/gems/*/plugins/*_plugin.rb; do
+		req=$(<"$stub")
+		[[ $req =~ \.\./gems/([^/]+)-([0-9][^/-]*)/lib/ ]] || continue
+		gem=${BASH_REMATCH[1]} ver=${BASH_REMATCH[2]}
+		cat > "$stub" <<-EOF
+		unless Gem::Specification.find_all_by_name('$gem').any? { |s| s.version > Gem::Version.new('$ver') }
+		  $req
+		end
+		EOF
+	done
 }
 
